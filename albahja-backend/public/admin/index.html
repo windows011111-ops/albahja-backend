@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AL BAHAJA — Admin Panel</title>
+<style>
+:root{--gold:#C9A84C;--dark:#111118;--surface:#16161f;--surface2:#1e1e2a;--white:#f5f0e8;--muted:#8a8a9a;--border:rgba(201,168,76,0.2);--red:#e05050;--green:#50c878;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--dark);color:var(--white);font-family:'Segoe UI',sans-serif;min-height:100vh;}
+header{background:rgba(10,10,10,0.95);border-bottom:1px solid var(--border);padding:16px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+header h1{font-size:1.1rem;letter-spacing:.15em;color:var(--gold);}
+#loginBox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:999;}
+.login-card{background:var(--surface);border:1px solid var(--border);padding:40px;width:340px;text-align:center;}
+.login-card h2{color:var(--gold);margin-bottom:24px;letter-spacing:.1em;}
+input[type=password],input[type=text]{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--white);padding:12px 16px;font-size:.9rem;outline:none;margin-bottom:16px;border-radius:0;}
+input:focus{border-color:var(--gold);}
+.btn{background:var(--gold);color:#000;border:none;padding:12px 32px;font-weight:700;font-size:.85rem;letter-spacing:.15em;cursor:pointer;text-transform:uppercase;width:100%;}
+.btn:hover{background:#e8cc7a;}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-sm{padding:6px 14px;font-size:.75rem;width:auto;}
+.tabs{display:flex;border-bottom:1px solid var(--border);padding:0 32px;}
+.tab{background:none;border:none;color:var(--muted);font-size:.82rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;padding:14px 20px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.tab.active,.tab:hover{color:var(--gold);border-bottom-color:var(--gold);}
+main{padding:32px;}
+.panel{display:none;}.panel.active{display:block;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;margin-bottom:32px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);padding:24px;text-align:center;}
+.stat-num{font-size:2rem;font-weight:900;color:var(--gold);}
+.stat-lbl{font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:4px;}
+.badge{background:var(--red);color:#fff;font-size:.65rem;padding:2px 7px;border-radius:9px;margin-left:6px;}
+table{width:100%;border-collapse:collapse;}
+th{background:var(--surface2);color:var(--gold);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;padding:12px 16px;text-align:left;}
+td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:.84rem;vertical-align:top;}
+tr:hover td{background:rgba(201,168,76,.03);}
+.status{display:inline-block;padding:3px 10px;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;font-weight:700;}
+.status.unread,.status.pending{background:rgba(224,80,80,.15);color:var(--red);}
+.status.read,.status.approved{background:rgba(80,200,120,.15);color:var(--green);}
+.status.rejected{background:rgba(150,150,150,.15);color:var(--muted);}
+.msg{white-space:pre-wrap;max-height:100px;overflow-y:auto;font-size:.8rem;color:rgba(245,240,232,.7);}
+.actions{display:flex;gap:8px;flex-wrap:wrap;}
+#toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--gold);padding:14px 20px;font-size:.85rem;opacity:0;transform:translateY(20px);transition:all .3s;z-index:9999;}
+#toast.show{opacity:1;transform:translateY(0);}
+.empty{padding:40px;text-align:center;color:var(--muted);font-size:.9rem;}
+</style>
+</head>
+<body>
+
+<!-- Login overlay -->
+<div id="loginBox">
+  <div class="login-card">
+    <h2>🔒 ADMIN LOGIN</h2>
+    <p style="color:var(--muted);font-size:.82rem;margin-bottom:20px">Enter your admin key to continue</p>
+    <input type="password" id="keyInput" placeholder="Admin Key" onkeydown="if(event.key==='Enter')doLogin()"/>
+    <button class="btn" onclick="doLogin()">LOGIN</button>
+    <p id="loginErr" style="color:var(--red);font-size:.8rem;margin-top:12px;"></p>
+  </div>
+</div>
+
+<header>
+  <h1>⚜ AL BAHAJA — ADMIN PANEL</h1>
+  <div style="display:flex;gap:12px;align-items:center">
+    <span id="headerStats" style="font-size:.78rem;color:var(--muted)"></span>
+    <button class="btn btn-sm" onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('stats',this)">Dashboard</button>
+  <button class="tab" onclick="showTab('contacts',this)">Contacts <span class="badge" id="unreadBadge">0</span></button>
+  <button class="tab" onclick="showTab('articles',this)">Articles <span class="badge" id="pendingBadge">0</span></button>
+  <button class="tab" onclick="showTab('gallery',this)">Gallery</button>
+</div>
+
+<main>
+  <!-- DASHBOARD -->
+  <div class="panel active" id="panel-stats">
+    <div class="stats-grid" id="statsGrid"></div>
+    <p style="color:var(--muted);font-size:.8rem">Last refreshed: <span id="lastRefresh">—</span></p>
+  </div>
+
+  <!-- CONTACTS -->
+  <div class="panel" id="panel-contacts">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h2 style="font-size:1rem;color:var(--gold);letter-spacing:.1em">CONTACT MESSAGES</h2>
+      <button class="btn btn-sm" onclick="loadContacts()">↻ Refresh</button>
+    </div>
+    <div id="contactsTable"></div>
+  </div>
+
+  <!-- ARTICLES -->
+  <div class="panel" id="panel-articles">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h2 style="font-size:1rem;color:var(--gold);letter-spacing:.1em">ARTICLE SUBMISSIONS</h2>
+      <button class="btn btn-sm" onclick="loadArticles()">↻ Refresh</button>
+    </div>
+    <div id="articlesTable"></div>
+  </div>
+
+  <!-- GALLERY -->
+  <div class="panel" id="panel-gallery">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h2 style="font-size:1rem;color:var(--gold);letter-spacing:.1em">GALLERY FILES</h2>
+      <button class="btn btn-sm" onclick="loadGallery()">↻ Refresh</button>
+    </div>
+    <div id="galleryGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px"></div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+let ADMIN_KEY = '';
+const BASE = window.location.origin;
+
+function doLogin() {
+  const k = document.getElementById('keyInput').value.trim();
+  if (!k) return;
+  ADMIN_KEY = k;
+  fetch(`${BASE}/api/admin/stats`, { headers: {'X-Admin-Key': k} })
+    .then(r => r.json()).then(d => {
+      if (d.success) {
+        document.getElementById('loginBox').style.display = 'none';
+        loadDashboard();
+      } else {
+        document.getElementById('loginErr').textContent = 'Invalid admin key.';
+        ADMIN_KEY = '';
+      }
+    }).catch(() => { document.getElementById('loginErr').textContent = 'Cannot reach server.'; });
+}
+
+function logout() { location.reload(); }
+
+function showTab(name, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  btn.classList.add('active');
+  if (name==='contacts') loadContacts();
+  if (name==='articles') loadArticles();
+  if (name==='gallery')  loadGallery();
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function fmt(iso) {
+  return new Date(iso).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
+}
+
+// ── Dashboard ────────────────────────────────────────────
+async function loadDashboard() {
+  const r = await fetch(`${BASE}/api/admin/stats`, { headers: {'X-Admin-Key': ADMIN_KEY} });
+  const d = await r.json();
+  if (!d.success) return;
+  const s = d.stats;
+  document.getElementById('unreadBadge').textContent  = s.unread;
+  document.getElementById('pendingBadge').textContent = s.pending;
+  document.getElementById('headerStats').textContent  = `Unread: ${s.unread} | Pending: ${s.pending}`;
+  document.getElementById('lastRefresh').textContent  = new Date().toLocaleTimeString();
+  document.getElementById('statsGrid').innerHTML = [
+    {n:s.contacts,  l:'Total Messages'},
+    {n:s.unread,    l:'Unread'},
+    {n:s.articles,  l:'Article Submissions'},
+    {n:s.pending,   l:'Pending Review'},
+    {n:s.gallery,   l:'Gallery Files'},
+    {n:s.subscribers, l:'Subscribers'},
+  ].map(x=>`<div class="stat-card"><div class="stat-num">${x.n}</div><div class="stat-lbl">${x.l}</div></div>`).join('');
+}
+
+// ── Contacts ─────────────────────────────────────────────
+async function loadContacts() {
+  const r = await fetch(`${BASE}/api/admin/contacts`, { headers: {'X-Admin-Key': ADMIN_KEY} });
+  const d = await r.json();
+  const el = document.getElementById('contactsTable');
+  if (!d.data || d.data.length===0) { el.innerHTML='<div class="empty">No messages yet.</div>'; return; }
+  el.innerHTML = `<table>
+    <tr><th>Date</th><th>Name</th><th>Email</th><th>Subject</th><th>Message</th><th>Status</th><th>Actions</th></tr>
+    ${d.data.map(c=>`<tr>
+      <td style="white-space:nowrap">${fmt(c.createdAt)}</td>
+      <td>${esc(c.name)}</td>
+      <td><a href="mailto:${esc(c.email)}" style="color:var(--gold)">${esc(c.email)}</a></td>
+      <td>${esc(c.subject)}</td>
+      <td><div class="msg">${esc(c.message)}</div></td>
+      <td><span class="status ${c.status}">${c.status}</span></td>
+      <td class="actions">
+        ${c.status==='unread'?`<button class="btn btn-sm" onclick="markRead('${c.id}')">Mark Read</button>`:''}
+        <button class="btn btn-sm btn-danger" onclick="delContact('${c.id}')">Delete</button>
+      </td>
+    </tr>`).join('')}
+  </table>`;
+}
+
+async function markRead(id) {
+  await fetch(`${BASE}/api/admin/contacts/${id}/read`, { method:'POST', headers:{'X-Admin-Key':ADMIN_KEY} });
+  toast('Marked as read.'); loadContacts(); loadDashboard();
+}
+async function delContact(id) {
+  if (!confirm('Delete this message?')) return;
+  await fetch(`${BASE}/api/admin/contacts/${id}`, { method:'DELETE', headers:{'X-Admin-Key':ADMIN_KEY} });
+  toast('Deleted.'); loadContacts(); loadDashboard();
+}
+
+// ── Articles ─────────────────────────────────────────────
+async function loadArticles() {
+  const r = await fetch(`${BASE}/api/admin/articles`, { headers: {'X-Admin-Key': ADMIN_KEY} });
+  const d = await r.json();
+  const el = document.getElementById('articlesTable');
+  if (!d.data || d.data.length===0) { el.innerHTML='<div class="empty">No submissions yet.</div>'; return; }
+  el.innerHTML = `<table>
+    <tr><th>Date</th><th>Name</th><th>Email</th><th>Title</th><th>Type</th><th>File / Link</th><th>Status</th><th>Actions</th></tr>
+    ${d.data.map(a=>`<tr>
+      <td style="white-space:nowrap">${fmt(a.createdAt)}</td>
+      <td>${esc(a.name)}</td>
+      <td><a href="mailto:${esc(a.email)}" style="color:var(--gold)">${esc(a.email)}</a></td>
+      <td>${esc(a.title)}</td>
+      <td>${esc(a.type)}</td>
+      <td>${a.fileUrl?`<a href="${BASE}${a.fileUrl}" target="_blank" style="color:var(--gold)">Download</a>`:a.driveLink?`<a href="${esc(a.driveLink)}" target="_blank" style="color:var(--gold)">Drive Link</a>`:'—'}</td>
+      <td><span class="status ${a.status}">${a.status}</span></td>
+      <td class="actions">
+        <button class="btn btn-sm" onclick="setStatus('${a.id}','approved')">✔ Approve</button>
+        <button class="btn btn-sm btn-danger" onclick="setStatus('${a.id}','rejected')">✘ Reject</button>
+        <button class="btn btn-sm btn-danger" onclick="delArticle('${a.id}')">Delete</button>
+      </td>
+    </tr>`).join('')}
+  </table>`;
+}
+
+async function setStatus(id, status) {
+  await fetch(`${BASE}/api/admin/articles/${id}/status`, {
+    method:'POST', headers:{'X-Admin-Key':ADMIN_KEY,'Content-Type':'application/json'},
+    body: JSON.stringify({status})
+  });
+  toast(`Article ${status}.`); loadArticles(); loadDashboard();
+}
+async function delArticle(id) {
+  if (!confirm('Delete this submission?')) return;
+  await fetch(`${BASE}/api/admin/articles/${id}`, { method:'DELETE', headers:{'X-Admin-Key':ADMIN_KEY} });
+  toast('Deleted.'); loadArticles(); loadDashboard();
+}
+
+// ── Gallery ──────────────────────────────────────────────
+async function loadGallery() {
+  const r = await fetch(`${BASE}/api/gallery`, { headers: {'X-Admin-Key': ADMIN_KEY} });
+  const d = await r.json();
+  const el = document.getElementById('galleryGrid');
+  if (!d.items || d.items.length===0) { el.innerHTML='<div class="empty">No files yet.</div>'; return; }
+  el.innerHTML = d.items.map(f=>`
+    <div style="background:var(--surface);border:1px solid var(--border);padding:8px">
+      ${f.type.startsWith('video')
+        ?`<video src="${BASE}${f.url}" style="width:100%;aspect-ratio:4/3;object-fit:cover" muted></video>`
+        :`<img src="${BASE}${f.url}" style="width:100%;aspect-ratio:4/3;object-fit:cover">`}
+      <p style="font-size:.7rem;color:var(--muted);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</p>
+      <button class="btn btn-sm btn-danger" style="width:100%;margin-top:6px" onclick="delGallery('${f.id}')">Delete</button>
+    </div>`).join('');
+}
+async function delGallery(id) {
+  if (!confirm('Delete this file?')) return;
+  await fetch(`${BASE}/api/gallery/${id}`, { method:'DELETE', headers:{'X-Admin-Key':ADMIN_KEY} });
+  toast('Deleted.'); loadGallery(); loadDashboard();
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>
