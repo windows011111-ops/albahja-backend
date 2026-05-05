@@ -103,6 +103,32 @@ tr:hover td{background:rgba(201,168,76,.03);}
       <h2 style="font-size:1rem;color:var(--gold);letter-spacing:.1em">GALLERY FILES</h2>
       <button class="btn btn-sm" onclick="loadGallery()">↻ Refresh</button>
     </div>
+
+    <!-- Upload Box -->
+    <div id="adminUploadZone"
+      onclick="document.getElementById('adminFileInput').click()"
+      ondragover="event.preventDefault();this.style.borderColor='var(--gold)'"
+      ondragleave="this.style.borderColor='var(--border)'"
+      ondrop="event.preventDefault();this.style.borderColor='var(--border)';handleAdminUpload(event.dataTransfer.files)"
+      style="border:2px dashed var(--border);padding:40px;text-align:center;cursor:pointer;margin-bottom:24px;transition:border-color .2s;">
+      <div style="font-size:2rem;margin-bottom:8px">📁</div>
+      <div style="color:var(--gold);font-weight:700;letter-spacing:.1em;font-size:.9rem">CLICK OR DRAG FILES HERE</div>
+      <div style="color:var(--muted);font-size:.75rem;margin-top:6px">Photos & Videos — JPG, PNG, GIF, WEBP, MP4, MOV (max 20MB each)</div>
+      <input type="file" id="adminFileInput" multiple accept="image/*,video/*" style="display:none"
+        onchange="handleAdminUpload(this.files)">
+    </div>
+
+    <!-- Upload Progress -->
+    <div id="uploadProgress" style="display:none;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:6px">
+        <span id="uploadLabel" style="color:var(--gold)">Uploading...</span>
+        <span id="uploadCount" style="color:var(--muted)"></span>
+      </div>
+      <div style="background:var(--surface2);height:6px;border-radius:3px">
+        <div id="uploadBar" style="background:var(--gold);height:6px;border-radius:3px;width:0%;transition:width .3s"></div>
+      </div>
+    </div>
+
     <div id="galleryGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px"></div>
   </div>
 </main>
@@ -265,15 +291,75 @@ async function loadGallery() {
   const r = await fetch(`${BASE}/api/gallery`, { headers: {'X-Admin-Key': ADMIN_KEY} });
   const d = await r.json();
   const el = document.getElementById('galleryGrid');
-  if (!d.items || d.items.length===0) { el.innerHTML='<div class="empty">No files yet.</div>'; return; }
+  if (!d.items || d.items.length===0) { el.innerHTML='<div class="empty">No files yet. Upload some above! 👆</div>'; return; }
   el.innerHTML = d.items.map(f=>`
-    <div style="background:var(--surface);border:1px solid var(--border);padding:8px">
+    <div style="background:var(--surface);border:1px solid var(--border);padding:8px;position:relative">
       ${f.type.startsWith('video')
-        ?`<video src="${BASE}${f.url}" style="width:100%;aspect-ratio:4/3;object-fit:cover" muted></video>`
-        :`<img src="${BASE}${f.url}" style="width:100%;aspect-ratio:4/3;object-fit:cover">`}
-      <p style="font-size:.7rem;color:var(--muted);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</p>
-      <button class="btn btn-sm btn-danger" style="width:100%;margin-top:6px" onclick="delGallery('${f.id}')">Delete</button>
+        ?`<video src="${BASE}${f.url}" style="width:100%;aspect-ratio:4/3;object-fit:cover" controls muted></video>`
+        :`<img src="${BASE}${f.url}" style="width:100%;aspect-ratio:4/3;object-fit:cover;cursor:pointer" onclick="window.open('${BASE}${f.url}','_blank')">`}
+      <p style="font-size:.7rem;color:var(--muted);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.name)}">${esc(f.name)}</p>
+      <p style="font-size:.65rem;color:var(--muted);margin-top:2px">${(f.size/1024).toFixed(0)} KB</p>
+      <button class="btn btn-sm btn-danger" style="width:100%;margin-top:6px" onclick="delGallery('${f.id}')">🗑 Delete</button>
     </div>`).join('');
+}
+
+// ── Admin direct upload ───────────────────────────────────
+async function handleAdminUpload(files) {
+  if (!files || files.length === 0) return;
+  const filesArr = Array.from(files);
+  const total = filesArr.length;
+  let done = 0;
+
+  const progress  = document.getElementById('uploadProgress');
+  const bar       = document.getElementById('uploadBar');
+  const label     = document.getElementById('uploadLabel');
+  const countEl   = document.getElementById('uploadCount');
+
+  progress.style.display = 'block';
+  bar.style.width = '0%';
+  label.textContent = 'Uploading...';
+  countEl.textContent = `0 / ${total}`;
+
+  for (const file of filesArr) {
+    // Check size
+    if (file.size > 20 * 1024 * 1024) {
+      toast(`⚠️ ${file.name} is too large (max 20MB). Skipped.`);
+      done++; continue;
+    }
+
+    label.textContent = `Uploading: ${file.name}`;
+    countEl.textContent = `${done} / ${total}`;
+
+    try {
+      const formData = new FormData();
+      formData.append('files', file);
+      const res  = await fetch(`${BASE}/api/gallery/upload`, {
+        method: 'POST',
+        headers: { 'X-Admin-Key': ADMIN_KEY },
+        body: formData
+      });
+      const data = await res.json();
+      if (!data.success) toast(`❌ Failed: ${file.name}`);
+    } catch(e) {
+      toast(`❌ Error uploading ${file.name}`);
+    }
+
+    done++;
+    bar.style.width = Math.round((done / total) * 100) + '%';
+    countEl.textContent = `${done} / ${total}`;
+  }
+
+  label.textContent = `✅ Done! ${done} file(s) uploaded.`;
+  bar.style.width = '100%';
+  setTimeout(() => { progress.style.display = 'none'; }, 3000);
+
+  // Reset file input
+  document.getElementById('adminFileInput').value = '';
+
+  // Reload gallery and dashboard
+  loadGallery();
+  loadDashboard();
+  toast(`✅ ${done} file(s) uploaded to gallery!`);
 }
 async function delGallery(id) {
   if (!confirm('Delete this file?')) return;
