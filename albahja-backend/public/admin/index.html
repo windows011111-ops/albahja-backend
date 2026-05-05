@@ -111,22 +111,40 @@ tr:hover td{background:rgba(201,168,76,.03);}
 
 <script>
 let ADMIN_KEY = '';
-const BASE = window.location.origin;
+const BASE = 'https://albahja-backend.onrender.com';
 
 function doLogin() {
   const k = document.getElementById('keyInput').value.trim();
-  if (!k) return;
+  if (!k) { document.getElementById('loginErr').textContent = 'Please enter your admin key.'; return; }
   ADMIN_KEY = k;
+  const errEl = document.getElementById('loginErr');
+  errEl.style.color = '#C9A84C';
+  errEl.textContent = 'Connecting... (may take 30s if server is sleeping)';
+
   fetch(`${BASE}/api/admin/stats`, { headers: {'X-Admin-Key': k} })
-    .then(r => r.json()).then(d => {
+    .then(r => {
+      if (r.status === 401) throw new Error('wrong_key');
+      return r.json();
+    })
+    .then(d => {
       if (d.success) {
         document.getElementById('loginBox').style.display = 'none';
         loadDashboard();
       } else {
-        document.getElementById('loginErr').textContent = 'Invalid admin key.';
+        errEl.style.color = '#e05050';
+        errEl.textContent = 'Invalid admin key. Check your ADMIN_KEY in Render.';
         ADMIN_KEY = '';
       }
-    }).catch(() => { document.getElementById('loginErr').textContent = 'Cannot reach server.'; });
+    })
+    .catch(err => {
+      errEl.style.color = '#e05050';
+      if (err.message === 'wrong_key') {
+        errEl.textContent = 'Wrong admin key. Check your ADMIN_KEY in Render environment.';
+      } else {
+        errEl.textContent = 'Cannot reach server. Try again in 30 seconds.';
+      }
+      ADMIN_KEY = '';
+    });
 }
 
 function logout() { location.reload(); }
